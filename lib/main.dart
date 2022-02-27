@@ -24,6 +24,9 @@ class _HomeState extends State<Home> {
 
   List _todoList = [];
 
+  Map<String, dynamic>? _lastRemoved;
+  late int _lastRemovedPos;
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +46,23 @@ class _HomeState extends State<Home> {
       _todoList.add(newTodo);
       _saveData();
     });
+  }
+
+  Future<void> _refresh() async {
+    await Future.delayed(const Duration(seconds: 1));
+    setState(() {
+      _todoList.sort((a, b) {
+        if (a["ok"] && !b["ok"]) {
+          return 1;
+        } else if (!a["ok"] && b["ok"]) {
+          return -1;
+        } else {
+          return 0;
+        }
+      });
+    });
+
+    return;
   }
 
   @override
@@ -76,10 +96,12 @@ class _HomeState extends State<Home> {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-                padding: const EdgeInsets.only(top: 10.0),
-                itemCount: _todoList.length,
-                itemBuilder: buildItem),
+            child: RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView.builder(
+                    padding: const EdgeInsets.only(top: 10.0),
+                    itemCount: _todoList.length,
+                    itemBuilder: buildItem)),
           ),
         ],
       ),
@@ -88,33 +110,58 @@ class _HomeState extends State<Home> {
 
   Widget buildItem(context, index) {
     return Dismissible(
-        key: Key(DateTime.now().microsecondsSinceEpoch.toString()),
-        background: Container(
-          color: Colors.red,
-          child: const Align(
-            alignment: Alignment(-0.9, 0.0),
-            child: Icon(
-              Icons.delete,
-              color: Colors.white,
-            ),
+      key: Key(DateTime.now().microsecondsSinceEpoch.toString()),
+      background: Container(
+        color: Colors.red,
+        child: const Align(
+          alignment: Alignment(-0.9, 0.0),
+          child: Icon(
+            Icons.delete,
+            color: Colors.white,
           ),
         ),
-        direction: DismissDirection.startToEnd,
-        child: CheckboxListTile(
-          onChanged: (c) {
-            setState(() {
-              _todoList[index]["ok"] = c;
-              _saveData();
-            });
-          },
-          title: Text(_todoList[index]["title"]),
-          value: _todoList[index]["ok"],
-          secondary: CircleAvatar(
-            child: Icon(
-              _todoList[index]["ok"] ? Icons.check : Icons.error,
-            ),
+      ),
+      direction: DismissDirection.startToEnd,
+      child: CheckboxListTile(
+        onChanged: (c) {
+          setState(() {
+            _todoList[index]["ok"] = c;
+            _saveData();
+          });
+        },
+        title: Text(_todoList[index]["title"]),
+        value: _todoList[index]["ok"],
+        secondary: CircleAvatar(
+          child: Icon(
+            _todoList[index]["ok"] ? Icons.check : Icons.error,
           ),
-        ));
+        ),
+      ),
+      onDismissed: (direction) {
+        setState(() {
+          _lastRemoved = Map.from(_todoList[index]);
+          _lastRemovedPos = index;
+          _todoList.removeAt(index);
+
+          _saveData();
+
+          final snack = SnackBar(
+            content: Text("Tarefa ${_lastRemoved!["title"]} removida"),
+            action: SnackBarAction(
+              label: "Desafazer",
+              onPressed: () {
+                setState(() {
+                  _todoList.insert(_lastRemovedPos, _lastRemoved);
+                  _saveData();
+                });
+              },
+            ),
+            duration: const Duration(seconds: 2),
+          );
+          Scaffold.of(context).showSnackBar(snack);
+        });
+      },
+    );
   }
 
   Future<File> _getFile() async {
